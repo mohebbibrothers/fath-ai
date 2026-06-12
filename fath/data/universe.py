@@ -28,7 +28,7 @@ TIMEFRAMES = ["1h", "4h", "1d"]
 
 
 def fetch_universe(symbols=None, timeframes=None, since="2019-01-01",
-                   source="okx_futures") -> dict:
+                   source="okx_swap") -> dict:
     """Download every (symbol, timeframe) pair. Returns dict of results."""
     symbols = symbols or DEFAULT_UNIVERSE
     timeframes = timeframes or TIMEFRAMES
@@ -45,7 +45,7 @@ def fetch_universe(symbols=None, timeframes=None, since="2019-01-01",
     return out
 
 
-def load_universe(symbols=None, timeframe="1d", source="okx_futures",
+def load_universe(symbols=None, timeframe="1d", source="okx_swap",
                   min_rows=400) -> dict:
     """Load all cached symbols for one timeframe. Returns {symbol: ohlcv}."""
     symbols = symbols or DEFAULT_UNIVERSE
