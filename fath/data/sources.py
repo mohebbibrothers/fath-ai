@@ -219,8 +219,97 @@ class OKXSource:
         raise RuntimeError("OKX request failed after retries")
 
 
+@dataclass
+class OKXSwapSource(OKXSource):
+    """OKX PERPETUAL FUTURES (USDT-margined swap) data.
+
+    This is the correct data for a futures bot: it trades the perp instrument
+    (e.g. BTC-USDT-SWAP), not spot. Perp prices, volume, funding and the
+    exchange's maintenance-margin tiers differ from spot, so backtests for a
+    leveraged futures strategy MUST be built on this data to be honest.
+
+    Inherits OKX pagination but targets the *-SWAP instrument family and fetches
+    perpetual candles. Funding-rate history and position tiers are exposed via
+    dedicated helpers (used by the futures engine for accurate liquidation).
+    """
+
+    name: str = "okx_swap"
+
+    def _inst(self, symbol: str) -> str:
+        base, quote = symbol.upper().split("/")
+        if quote == "USD":
+            quote = "USDT"
+        return f"{base}-{quote}-SWAP"
+
+
+def fetch_funding_history(symbol: str, since: pd.Timestamp,
+                          base_url: str = "https://www.okx.com/api/v5") -> pd.DataFrame:
+    """Realized funding-rate history for a USDT perp. UTC-indexed."""
+    base, quote = symbol.upper().split("/")
+    if quote == "USD":
+        quote = "USDT"
+    inst = f"{base}-{quote}-SWAP"
+    ts = pd.Timestamp(since)
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    since_ms = int(ts.timestamp() * 1000)
+
+    rows = []
+    cursor = None
+    while True:
+        params = {"instId": inst, "limit": 100}
+        if cursor is not None:
+            params["after"] = cursor
+        try:
+            r = requests.get(f"{base_url}/public/funding-rate-history",
+                             params=params, timeout=20)
+            r.raise_for_status()
+            data = r.json().get("data", [])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Funding history fetch failed: %s", exc)
+            break
+        if not data:
+            break
+        rows += data
+        oldest = int(data[-1]["fundingTime"])
+        if oldest <= since_ms or len(data) < 100:
+            break
+        cursor = str(oldest)
+        time.sleep(0.2)
+
+    if not rows:
+        return pd.DataFrame(columns=["funding_rate"])
+    df = pd.DataFrame(rows)
+    df["funding_rate"] = df["realizedRate"].astype(float)
+    df.index = pd.to_datetime(df["fundingTime"].astype("int64"), unit="ms", utc=True)
+    df = df[["funding_rate"]].sort_index()
+    return df[~df.index.duplicated(keep="last")]
+
+
+def fetch_position_tiers(symbol: str,
+                         base_url: str = "https://www.okx.com/api/v5") -> pd.DataFrame:
+    """Maintenance-margin tiers for a perp (max leverage & MMR per notional)."""
+    base, quote = symbol.upper().split("/")
+    if quote == "USD":
+        quote = "USDT"
+    family = f"{base}-{quote}"
+    try:
+        r = requests.get(f"{base_url}/public/position-tiers",
+                         params={"instType": "SWAP", "tdMode": "isolated",
+                                 "instFamily": family}, timeout=20)
+        r.raise_for_status()
+        data = r.json().get("data", [])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Position tiers fetch failed: %s", exc)
+        return pd.DataFrame()
+    df = pd.DataFrame(data)
+    for col in ("maxLever", "mmr", "maxSz", "minSz"):
+        if col in df:
+            df[col] = df[col].astype(float)
+    return df
+
+
 def get_source(name: str) -> DataSource:
-    sources = {"kraken": KrakenSource(), "okx": OKXSource()}
+    sources = {"kraken": KrakenSource(), "okx": OKXSource(), "okx_swap": OKXSwapSource()}
     if name not in sources:
         raise ValueError(f"Unknown data source '{name}'. Available: {list(sources)}")
     return sources[name]

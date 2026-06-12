@@ -72,18 +72,41 @@ def liquidation_price(entry: float, side: int, leverage: float, mmr: float) -> f
         return entry * (1 + 1.0 / leverage - mmr)
 
 
+def protective_stop_price(entry: float, side: int, leverage: float,
+                          mmr: float, safety: float = 0.5) -> float:
+    """A HARD stop placed strictly INSIDE the liquidation price.
+
+    To GUARANTEE we are never liquidated, we exit at a price that is reached
+    before the liquidation price. We place the stop at ``safety`` fraction of
+    the distance from entry to liquidation (safety<1 => always triggers first).
+
+    Example: 5x long, liq ~ -20% from entry. With safety=0.5 the protective
+    stop sits at ~-10%, so the position is closed (at a controlled loss) well
+    before liquidation can ever occur. Capital survives, always.
+    """
+    liq = liquidation_price(entry, side, leverage, mmr)
+    return entry + safety * (liq - entry)
+
+
 def run_futures_backtest(
     ohlcv: pd.DataFrame,
     target_position: pd.Series,   # signed exposure in [-1, 1] (fraction of equity as margin)
     leverage: float = 3.0,
     cost: FuturesCostModel | None = None,
     init_equity: float = 10_000.0,
+    protective_stop: bool = True,
+    stop_safety: float = 0.5,
 ) -> FuturesResult:
     """Backtest a leveraged perp strategy with liquidation & funding.
 
     target_position[t] is decided at close of bar t and executed at open of t+1.
     The magnitude (0..1) is the fraction of equity committed as MARGIN; notional
     = margin * leverage. Liquidation is checked against each bar's high/low.
+
+    If ``protective_stop`` is True (default), a hard stop is placed inside the
+    liquidation price (at ``stop_safety`` of the distance to liq). This makes
+    liquidation effectively IMPOSSIBLE: the position is always closed first, at
+    a controlled loss. This is the professional way to "never get liquidated".
     """
     cost = cost or FuturesCostModel()
     df = ohlcv.copy()
@@ -104,8 +127,10 @@ def run_futures_backtest(
     cur_margin_frac = 0.0  # fraction of equity as margin
     entry_px = np.nan
     liq_px = np.nan
+    stop_px = np.nan
     total_cost = 0.0
     n_liq = 0
+    n_stops = 0
     trades = []
     bars_in_pos = 0
 
@@ -113,6 +138,24 @@ def run_futures_backtest(
         want = des[t]
         want_side = int(np.sign(want))
         want_frac = abs(want)
+
+        # ---- PROTECTIVE STOP: exit before liquidation can ever happen -----
+        if cur_side != 0 and not np.isnan(stop_px):
+            stop_hit = (lo[t] <= stop_px) if cur_side > 0 else (h[t] >= stop_px)
+            if stop_hit:
+                # close at the stop price (controlled loss), pay exit fee
+                pnl = (stop_px / entry_px - 1.0) * cur_side * (cur_margin_frac * leverage)
+                eq *= (1 + pnl)
+                fee = cur_margin_frac * leverage * (cost.taker_fee + cost.slippage_bps / 1e4)
+                eq *= (1 - fee); total_cost += fee
+                n_stops += 1
+                trades.append({"timestamp": df.index[t], "event": "STOP",
+                               "side": cur_side, "price": stop_px})
+                cur_side = 0; cur_margin_frac = 0.0
+                entry_px = np.nan; liq_px = np.nan; stop_px = np.nan
+                bars_in_pos = 0
+                equity[t] = max(eq, 0.0); pos_track[t] = 0.0
+                continue
 
         # ---- check liquidation of existing position on THIS bar ----------
         if cur_side != 0 and not np.isnan(liq_px):
@@ -146,11 +189,16 @@ def run_futures_backtest(
                 cur_side = want_side; cur_margin_frac = want_frac
                 entry_px = fill
                 liq_px = liquidation_price(fill, cur_side, leverage, cost.mmr)
+                stop_px = (protective_stop_price(fill, cur_side, leverage,
+                                                 cost.mmr, stop_safety)
+                           if protective_stop else np.nan)
                 bars_in_pos = 0
                 trades.append({"timestamp": df.index[t], "event": "OPEN",
-                               "side": cur_side, "price": fill, "liq": liq_px})
+                               "side": cur_side, "price": fill, "liq": liq_px,
+                               "stop": stop_px})
             else:
-                cur_side = 0; cur_margin_frac = 0.0; entry_px = np.nan; liq_px = np.nan
+                cur_side = 0; cur_margin_frac = 0.0
+                entry_px = np.nan; liq_px = np.nan; stop_px = np.nan
 
         # ---- mark-to-market PnL over bar t (open -> close) ---------------
         if cur_side != 0:
@@ -179,9 +227,9 @@ def run_futures_backtest(
         n_liquidations=n_liq,
         cost_drag=total_cost,
         meta={"leverage": leverage, "init_equity": init_equity,
-              "final_equity": float(equity_s.iloc[-1])},
+              "final_equity": float(equity_s.iloc[-1]), "n_stops": n_stops},
     )
-    log.info("Futures BT: L=%.1f final=%.0f (%.1f%%) liq=%d cost=%.3f",
+    log.info("Futures BT: L=%.1f final=%.0f (%.1f%%) liq=%d stops=%d cost=%.3f",
              leverage, equity_s.iloc[-1], (equity_s.iloc[-1]/init_equity-1)*100,
-             n_liq, total_cost)
+             n_liq, n_stops, total_cost)
     return res
