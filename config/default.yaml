@@ -1,0 +1,31 @@
+# fath-ai default research configuration
+data:
+  source: okx           # OKX supports deep historical pagination (years)
+  symbol: BTC/USDT
+  timeframe: 1h
+  since: "2023-01-01"
+
+labels:
+  tp_mult: 1.5          # take-profit barrier in units of volatility
+  sl_mult: 1.5          # stop-loss barrier in units of volatility
+  max_horizon: 24       # vertical barrier (bars)
+  min_ret: 0.0          # neutral dead-zone at timeout
+
+cv:
+  n_splits: 5
+  test_frac: 0.30
+  embargo_frac: 0.01
+  expanding: true
+
+costs:
+  taker_fee: 0.0010     # 10 bps per side
+  slippage_bps: 2.0
+  funding_per_bar: 0.0
+
+policy:
+  conf_threshold: 0.45
+  edge_threshold: 0.10
+  target_vol_per_bar: 0.01
+  max_leverage: 1.0
+
+output_dir: artifacts

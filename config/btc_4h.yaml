@@ -1,0 +1,31 @@
+# Lower-frequency config: 4h bars dramatically reduce cost drag.
+data:
+  source: okx
+  symbol: BTC/USDT
+  timeframe: 4h
+  since: "2020-01-01"
+
+labels:
+  tp_mult: 2.0
+  sl_mult: 2.0
+  max_horizon: 12        # 12 * 4h = 2 days
+  min_ret: 0.0
+
+cv:
+  n_splits: 5
+  test_frac: 0.30
+  embargo_frac: 0.01
+  expanding: true
+
+costs:
+  taker_fee: 0.0010
+  slippage_bps: 2.0
+  funding_per_bar: 0.0
+
+policy:
+  conf_threshold: 0.50
+  edge_threshold: 0.04
+  target_vol_per_bar: 0.02
+  max_leverage: 1.0
+
+output_dir: artifacts_4h
