@@ -33,7 +33,7 @@ NON_FEATURE = {"label", "t1", "weight", "symbol", "ts", "oos_sig", "oos_mp",
 
 
 def run(timeframe="1d", source="okx", rsi_low=30.0, rsi_high=70.0,
-        allow_short=False, meta_threshold=0.50, min_setups=150,
+        allow_short=False, meta_threshold=0.65, min_setups=150,
         out_dir="artifacts_specialist"):
     data = load_universe(DEFAULT_UNIVERSE, timeframe, source)
     sent_map = {}

@@ -73,6 +73,68 @@ def obv(close: pd.Series, volume: pd.Series) -> pd.Series:
     return (sign * volume).cumsum()
 
 
+def williams_r(high, low, close, period: int = 14) -> pd.Series:
+    """Williams %R: momentum oscillator, -100..0 (oversold near -100)."""
+    hh = high.rolling(period).max()
+    ll = low.rolling(period).min()
+    return -100 * (hh - close) / (hh - ll).replace(0, np.nan)
+
+
+def cci(high, low, close, period: int = 20) -> pd.Series:
+    """Commodity Channel Index."""
+    tp = (high + low + close) / 3
+    ma = tp.rolling(period).mean()
+    md = (tp - ma).abs().rolling(period).mean()
+    return (tp - ma) / (0.015 * md.replace(0, np.nan))
+
+
+def mfi(high, low, close, volume, period: int = 14) -> pd.Series:
+    """Money Flow Index: volume-weighted RSI (0..100)."""
+    tp = (high + low + close) / 3
+    rmf = tp * volume
+    pos = rmf.where(tp > tp.shift(1), 0.0)
+    neg = rmf.where(tp < tp.shift(1), 0.0)
+    pos_s = pos.rolling(period).sum()
+    neg_s = neg.rolling(period).sum().replace(0, np.nan)
+    mr = pos_s / neg_s
+    return 100 - 100 / (1 + mr)
+
+
+def keltner(high, low, close, period: int = 20, mult: float = 2.0):
+    """Keltner Channels (EMA +/- mult*ATR). Returns (%position, width)."""
+    ma = close.ewm(span=period, adjust=False, min_periods=period).mean()
+    rng = atr(high, low, close, period)
+    upper = ma + mult * rng
+    lower = ma - mult * rng
+    pos = (close - lower) / (upper - lower).replace(0, np.nan)
+    width = (upper - lower) / ma
+    return pos, width
+
+
+def vwap_dev(high, low, close, volume, period: int = 20) -> pd.Series:
+    """Rolling VWAP deviation: how far price is from volume-weighted price."""
+    tp = (high + low + close) / 3
+    pv = (tp * volume).rolling(period).sum()
+    vv = volume.rolling(period).sum().replace(0, np.nan)
+    vwap = pv / vv
+    return (close - vwap) / vwap
+
+
+def ichimoku_signals(high, low, close):
+    """Ichimoku-derived features: price vs cloud, tenkan/kijun spread.
+
+    Uses only past data (standard backward-looking spans; we do NOT project the
+    cloud forward into the future to avoid look-ahead)."""
+    conv = (high.rolling(9).max() + low.rolling(9).min()) / 2
+    base = (high.rolling(26).max() + low.rolling(26).min()) / 2
+    span_a = (conv + base) / 2
+    span_b = (high.rolling(52).max() + low.rolling(52).min()) / 2
+    tk_spread = (conv - base) / close
+    cloud_pos = (close - span_a) / close
+    cloud_pos_b = (close - span_b) / close
+    return tk_spread, cloud_pos, cloud_pos_b
+
+
 def adx(high, low, close, period: int = 14) -> pd.Series:
     up = high.diff()
     down = -low.diff()

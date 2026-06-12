@@ -67,6 +67,17 @@ def build_features(df: pd.DataFrame, sentiment: pd.DataFrame | None = None) -> p
     _, _, _, bb_width, bb_pctb = ta.bollinger(c)
     f["bb_width"] = bb_width
     f["bb_pctb"] = bb_pctb
+    f["williams_r"] = ta.williams_r(h, l, c, 14)
+    f["cci_20"] = ta.cci(h, l, c, 20)
+    f["mfi_14"] = ta.mfi(h, l, c, v, 14)
+    kelt_pos, kelt_w = ta.keltner(h, l, c)
+    f["kelt_pos"] = kelt_pos
+    f["kelt_width"] = kelt_w
+    f["vwap_dev"] = ta.vwap_dev(h, l, c, v, 20)
+    tk_spread, cloud_a, cloud_b = ta.ichimoku_signals(h, l, c)
+    f["ich_tk_spread"] = tk_spread
+    f["ich_cloud_a"] = cloud_a
+    f["ich_cloud_b"] = cloud_b
 
     # --- Volume / liquidity -------------------------------------------------
     obv = ta.obv(c, v)
