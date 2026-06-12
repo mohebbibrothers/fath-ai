@@ -35,9 +35,17 @@ from fath.utils.logging import get_logger
 log = get_logger("meta")
 
 
-def build_dataset(symbol, timeframe, source, tp, sl, horizon, vol_window):
+def build_dataset(symbol, timeframe, source, tp, sl, horizon, vol_window,
+                  use_sentiment=True):
     ohlcv = store.load(symbol, timeframe, source)
-    feats = build_features(ohlcv)
+    sent = None
+    if use_sentiment:
+        try:
+            from fath.data.sentiment import fetch_fear_greed, merge_sentiment
+            sent = merge_sentiment(ohlcv, fetch_fear_greed(0))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Sentiment unavailable (%s); continuing without", exc)
+    feats = build_features(ohlcv, sentiment=sent)
     logret = np.log(ohlcv["close"]).diff()
     vol = logret.rolling(vol_window).std(ddof=0)
     labels = triple_barrier_labels(ohlcv["close"], vol, tp, sl, horizon, 0.0)

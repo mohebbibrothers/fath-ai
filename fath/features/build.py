@@ -24,8 +24,13 @@ from fath.utils.logging import get_logger
 log = get_logger(__name__)
 
 
-def build_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Return a feature DataFrame aligned to ``df`` index (no look-ahead)."""
+def build_features(df: pd.DataFrame, sentiment: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Return a feature DataFrame aligned to ``df`` index (no look-ahead).
+
+    If ``sentiment`` is provided (output of data.sentiment.merge_sentiment, with
+    already-LAGGED columns fng_value/fng_class/fng_change), those columns are
+    appended as features. They are pre-shifted upstream so no leakage occurs.
+    """
     o, h, l, c, v = df["open"], df["high"], df["low"], df["close"], df["volume"]
     f = pd.DataFrame(index=df.index)
 
@@ -86,6 +91,19 @@ def build_features(df: pd.DataFrame) -> pd.DataFrame:
     dow = idx.dayofweek
     f["dow_sin"] = np.sin(2 * np.pi * dow / 7)
     f["dow_cos"] = np.cos(2 * np.pi * dow / 7)
+
+    # --- Sentiment / news (already lagged upstream, no look-ahead) ----------
+    if sentiment is not None:
+        for col in ("fng_value", "fng_class", "fng_change"):
+            if col in sentiment.columns:
+                f[col] = sentiment[col].reindex(f.index)
+        if "fng_value" in f:
+            # normalized 0-1 and z-scored over a trailing window
+            f["fng_norm"] = f["fng_value"] / 100.0
+            f["fng_z_30"] = (
+                (f["fng_value"] - f["fng_value"].rolling(30).mean())
+                / f["fng_value"].rolling(30).std(ddof=0)
+            )
 
     n_before = len(f)
     f = f.replace([np.inf, -np.inf], np.nan).dropna()
