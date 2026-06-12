@@ -90,7 +90,7 @@ def build_positions(data, pooled, meta_threshold):
     return out
 
 
-def run(timeframe="1d", source="okx", rsi_low=30.0, rsi_high=70.0,
+def run(timeframe="1d", source="okx_futures", rsi_low=30.0, rsi_high=70.0,
         allow_short=False, meta_threshold=0.65,
         leverages=(1, 2, 3, 5, 8, 10), out_dir="artifacts_futures"):
     data, pooled = _signals(timeframe, source, rsi_low, allow_short, rsi_high)
@@ -147,7 +147,7 @@ def _fund_bars(tf):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--timeframe", default="1d")
-    ap.add_argument("--source", default="okx")
+    ap.add_argument("--source", default="okx_futures")
     ap.add_argument("--allow_short", action="store_true")
     ap.add_argument("--meta_threshold", type=float, default=0.65)
     args = ap.parse_args()

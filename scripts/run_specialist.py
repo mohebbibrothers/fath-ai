@@ -32,7 +32,7 @@ NON_FEATURE = {"label", "t1", "weight", "symbol", "ts", "oos_sig", "oos_mp",
                "setup", "up"}
 
 
-def run(timeframe="1d", source="okx", rsi_low=30.0, rsi_high=70.0,
+def run(timeframe="1d", source="okx_futures", rsi_low=30.0, rsi_high=70.0,
         allow_short=False, meta_threshold=0.65, min_setups=150,
         out_dir="artifacts_specialist"):
     data = load_universe(DEFAULT_UNIVERSE, timeframe, source)
@@ -144,7 +144,7 @@ def _hold_n(pos: pd.Series, n: int = 10) -> pd.Series:
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--timeframe", default="1d")
-    ap.add_argument("--source", default="okx")
+    ap.add_argument("--source", default="okx_futures")
     ap.add_argument("--rsi_low", type=float, default=30.0)
     ap.add_argument("--rsi_high", type=float, default=70.0)
     ap.add_argument("--allow_short", action="store_true")

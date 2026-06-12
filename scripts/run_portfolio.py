@@ -100,7 +100,7 @@ def _chart_returns_for_tf(timeframe, source, leverage, meta_threshold,
     return chart_rets, chart_stats
 
 
-def run(source="okx", leverage=3.0, meta_threshold=0.65,
+def run(source="okx_futures", leverage=3.0, meta_threshold=0.65,
         out_dir="artifacts_portfolio"):
     all_rets, all_stats = {}, {}
     for tf in TIMEFRAMES:
@@ -141,7 +141,7 @@ def run(source="okx", leverage=3.0, meta_threshold=0.65,
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", default="okx")
+    ap.add_argument("--source", default="okx_futures")
     ap.add_argument("--leverage", type=float, default=3.0)
     ap.add_argument("--meta_threshold", type=float, default=0.65)
     args = ap.parse_args()

@@ -155,6 +155,7 @@ class OKXSource:
 
     name: str = "okx"
     base: str = "https://www.okx.com/api/v5"
+    market: str = "spot"   # "spot" or "swap" (USDT-margined perpetual futures)
     _bar = {"1m": "1m", "5m": "5m", "15m": "15m", "30m": "30m",
             "1h": "1H", "4h": "4H", "1d": "1D"}
 
@@ -162,6 +163,9 @@ class OKXSource:
         base, quote = symbol.upper().split("/")
         if quote == "USD":  # OKX spot is mostly USDT; map for convenience
             quote = "USDT"
+        if self.market == "swap":
+            # USDT-margined perpetual futures contract id
+            return f"{base}-{quote}-SWAP"
         return f"{base}-{quote}"
 
     def fetch_ohlcv(self, symbol: str, timeframe: str, since: pd.Timestamp) -> pd.DataFrame:
@@ -220,7 +224,12 @@ class OKXSource:
 
 
 def get_source(name: str) -> DataSource:
-    sources = {"kraken": KrakenSource(), "okx": OKXSource()}
+    sources = {
+        "kraken": KrakenSource(),
+        "okx": OKXSource(market="spot"),
+        # OKX USDT-margined PERPETUAL FUTURES — this is what we actually trade.
+        "okx_futures": OKXSource(market="swap"),
+    }
     if name not in sources:
         raise ValueError(f"Unknown data source '{name}'. Available: {list(sources)}")
     return sources[name]
